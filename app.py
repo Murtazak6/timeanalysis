@@ -1,59 +1,72 @@
 import streamlit as st
-from datetime import datetime
-from attendance_analyzer import calculate_work_hours, format_time, format_duration, determine_day_status
+import csv
+import io
+from attendance_analyzer import calculate_work_hours, format_time, format_duration, determine_day_status, parse_time
 
-st.title("📅 Attendance Analyzer - Manual Input")
+st.title("📅 Attendance Analyzer — Paste Input Version")
 
-st.write("Enter your IN/OUT records below:")
+st.write("Paste your attendance rows below (including header):")
 
-# Container for dynamic rows
-entries = []
+raw_text = st.text_area("Paste data here:", height=300)
 
-num_rows = st.number_input("How many entries?", min_value=1, max_value=20, value=2)
+def parse_from_text(raw):
+    """Parse tab-separated attendance data from raw text input."""
+    entries = []
 
-for i in range(num_rows):
-    col1, col2, col3 = st.columns(3)
+    if not raw.strip():
+        return []
 
-    with col1:
-        date = st.date_input(f"Date #{i+1}")
-    with col2:
-        time_val = st.time_input(f"Time #{i+1}")
-    with col3:
-        in_out = st.selectbox(f"Type #{i+1}", ["In", "Out"])
+    # Convert to file-like object
+    text_stream = io.StringIO(raw)
+    reader = csv.DictReader(text_stream, delimiter="\t")
 
-    # Combine date+time into datetime
-    dt = datetime.combine(date, time_val)
-    entries.append({
-        "datetime": dt,
-        "type": in_out,
-        "date": date.strftime('%d-%b-%y')
-    })
+    for row in reader:
+        date = row.get('Date', '').strip()
+        entry_time = row.get('Entry Time', '').strip()
+        in_out = row.get('In/Out', '').strip()
 
-if st.button("Analyze Attendance"):
-    # Feed directly to your function
-    data = calculate_work_hours(entries)
+        if date and entry_time and in_out:
+            dt = parse_time(date, entry_time)
+            if dt:
+                entries.append({
+                    'datetime': dt,
+                    'type': in_out,
+                    'date': date
+                })
 
-    st.subheader("📘 Summary")
-    st.write(f"**First In:** {format_time(data['first_in'])}")
-    st.write(f"**Last Out:** {format_time(data['last_out'])}")
-    st.write(f"**Total Work:** {format_duration(data['total_minutes'])}")
-    st.write(f"**Status:** {determine_day_status(data['total_hours'])}")
+    return entries
 
-    st.subheader("⏱ Work Sessions")
-    for session in data['work_sessions']:
-        st.write(
-            f"- {format_time(session['start'])} → {format_time(session['end'])} "
-            f"({format_duration(session['duration_minutes'])})"
-        )
 
-    st.subheader("☕ Breaks")
-    if data['breaks']:
-        for br in data['breaks']:
-            st.write(
-                f"- {format_time(br['start'])} → {format_time(br['end'])} "
-                f"({format_duration(br['duration_minutes'])})"
-            )
+if st.button("Analyze"):
+    entries = parse_from_text(raw_text)
+
+    if not entries:
+        st.error("No valid IN/OUT entries found. Check your data format.")
     else:
-        st.write("No breaks detected")
+        data = calculate_work_hours(entries)
 
-    st.success("Analysis complete!")
+        st.subheader("📘 Summary")
+        st.write(f"**First In:** {format_time(data['first_in'])}")
+        st.write(f"**Last Out:** {format_time(data['last_out'])}")
+        st.write(f"**Total Work:** {format_duration(data['total_minutes'])}")
+        st.write(f"**Status:** {determine_day_status(data['total_hours'])}")
+
+        st.subheader("⏱ Work Sessions")
+        for s in data["work_sessions"]:
+            st.write(
+                f"- {format_time(s['start'])} → {format_time(s['end'])} "
+                f"({format_duration(s['duration_minutes'])})"
+                + (" **(Ongoing)**" if s.get("ongoing") else "")
+            )
+
+        st.subheader("☕ Breaks")
+        if data["breaks"]:
+            for b in data["breaks"]:
+                st.write(
+                    f"- {format_time(b['start'])} → {format_time(b['end'])} "
+                    f"({format_duration(b['duration_minutes'])})"
+                )
+        else:
+            st.write("No breaks detected")
+
+        st.success("Analysis completed!")
