@@ -73,6 +73,19 @@ if st.button("Analyze Attendance"):
         else:
             st.success("🎉 Full Day Completed!")
 
+        # ---- Half Day Calculation ----
+        remaining_half_hours = 4.5 - data["total_hours"]
+
+        if remaining_half_hours > 0:
+            remaining_half_minutes = remaining_half_hours * 60
+            st.write(f"**Remaining for Half Day:** {format_duration(remaining_half_minutes)}")
+
+            if data["is_currently_working"] and data["current_time"]:
+                estimated_half = data["current_time"] + timedelta(minutes=remaining_half_minutes)
+                st.write(f"**Estimated Half Day Ends At:** {estimated_half.strftime('%I:%M %p')}")
+        else:
+            st.success("Half Day Completed!")
+
         # ------------- Work Sessions ----------------
         st.header("⏱ Work Sessions")
         if data["work_sessions"]:
